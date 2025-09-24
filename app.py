@@ -182,6 +182,7 @@ def save_diary_entry(date):
     conn = sqlite3.connect('diary.db')
     cursor = conn.cursor()
     
+    # Use INSERT OR REPLACE to ensure data is properly saved
     cursor.execute('''INSERT OR REPLACE INTO diary_entries 
                      (user_id, entry_date, content, updated_at) 
                      VALUES (?, ?, ?, CURRENT_TIMESTAMP)''',
@@ -246,6 +247,37 @@ def update_image():
                      WHERE user_id = ? AND filename = ?''',
                   (position_x, position_y, rotation, scale, tilt_x, tilt_y, caption, 
                    session['user_id'], filename))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
+
+@app.route('/api/delete_image', methods=['POST'])
+def delete_image():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.get_json()
+    filename = data.get('filename')
+    
+    if not filename:
+        return jsonify({'error': 'Filename required'}), 400
+    
+    conn = sqlite3.connect('diary.db')
+    cursor = conn.cursor()
+    
+    # Delete from database
+    cursor.execute('DELETE FROM diary_images WHERE user_id = ? AND filename = ?',
+                  (session['user_id'], filename))
+    
+    # Delete physical file
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass  # File might be in use or already deleted
+    
     conn.commit()
     conn.close()
     

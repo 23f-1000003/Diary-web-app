@@ -4,15 +4,31 @@ let selectedImage = null;
 let isDragging = false;
 let dragOffset = { x: 0, y: 0 };
 let pendingImageFile = null;
+let saveTimeout = null;
 
-// Initialize the diary
+// Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
     updateDateDisplay();
     loadDiaryEntry();
-    setupEventListeners();
+    setupImageUpload();
+    setupKeyboardShortcuts();
+    
+    // Auto-save diary text with debouncing
+    const diaryText = document.getElementById('diaryText');
+    diaryText.addEventListener('input', function() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            saveDiary(false); // Silent save
+        }, 2000); // Save after 2 seconds of no typing
+    });
+    
+    // Save immediately when textarea loses focus
+    diaryText.addEventListener('blur', function() {
+        clearTimeout(saveTimeout);
+        saveDiary(false);
+    });
 });
 
-// Date management
 function updateDateDisplay() {
     const options = { 
         weekday: 'long', 
@@ -20,166 +36,230 @@ function updateDateDisplay() {
         month: 'long', 
         day: 'numeric' 
     };
-    document.getElementById('currentDate').textContent = 
-        currentDate.toLocaleDateString('en-US', options);
+    document.getElementById('currentDate').textContent = currentDate.toLocaleDateString('en-US', options);
 }
 
-function changeDate(days) {
-    currentDate.setDate(currentDate.getDate() + days);
-    updateDateDisplay();
-    loadDiaryEntry();
+function formatDateForAPI(date) {
+    return date.toISOString().split('T')[0];
 }
 
-function goToToday() {
-    currentDate = new Date();
-    updateDateDisplay();
-    loadDiaryEntry();
-}
-
-function getDateString() {
-    return currentDate.toISOString().split('T')[0];
-}
-
-// Diary entry management
 async function loadDiaryEntry() {
+    const dateStr = formatDateForAPI(currentDate);
+    
     try {
-        const response = await fetch(`/api/diary/${getDateString()}`);
+        const response = await fetch(`/api/diary/${dateStr}`);
         const data = await response.json();
         
         if (response.ok) {
+            // Load text content
             document.getElementById('diaryText').value = data.content || '';
-            loadImages(data.images || []);
+            
+            // Clear existing images
+            const container = document.getElementById('imagesContainer');
+            container.innerHTML = '';
+            
+            // Load images
+            if (data.images && data.images.length > 0) {
+                data.images.forEach(imageData => {
+                    createImageElement(imageData);
+                });
+            }
         } else {
-            showNotification('Failed to load diary entry', 'error');
+            console.error('Failed to load diary entry:', data.error);
         }
     } catch (error) {
         console.error('Error loading diary entry:', error);
-        showNotification('Connection error while loading entry', 'error');
+        showNotification('Failed to load diary entry', 'error');
     }
 }
 
-async function saveDiary() {
+async function saveDiary(showNotification = true) {
+    const dateStr = formatDateForAPI(currentDate);
     const content = document.getElementById('diaryText').value;
     
     try {
-        const response = await fetch(`/api/diary/${getDateString()}`, {
+        const response = await fetch(`/api/diary/${dateStr}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ content })
+            body: JSON.stringify({ content: content })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && showNotification) {
+            showNotification('Diary saved successfully!', 'success');
+        } else if (!response.ok) {
+            console.error('Failed to save diary:', data.error);
+            if (showNotification) {
+                showNotification('Failed to save diary', 'error');
+            }
+        }
+    } catch (error) {
+        console.error('Error saving diary:', error);
+        if (showNotification) {
+            showNotification('Failed to save diary', 'error');
+        }
+    }
+}
+
+function changeDate(days) {
+    // Save current entry before changing date
+    saveDiary(false);
+    
+    currentDate.setDate(currentDate.getDate() + days);
+    updateDateDisplay();
+    loadDiaryEntry();
+    hideImageControls();
+}
+
+function goToToday() {
+    // Save current entry before going to today
+    saveDiary(false);
+    
+    currentDate = new Date();
+    updateDateDisplay();
+    loadDiaryEntry();
+    hideImageControls();
+}
+
+function setupImageUpload() {
+    document.getElementById('imageUpload').addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            pendingImageFile = e.target.files[0];
+            showCaptionModal();
+        }
+    });
+}
+
+function showCaptionModal() {
+    document.getElementById('captionModal').style.display = 'flex';
+    document.getElementById('captionInput').focus();
+}
+
+function closeCaptionModal() {
+    document.getElementById('captionModal').style.display = 'none';
+    document.getElementById('captionInput').value = '';
+    pendingImageFile = null;
+    document.getElementById('imageUpload').value = '';
+}
+
+async function saveCaptionAndUpload() {
+    if (!pendingImageFile) return;
+    
+    const caption = document.getElementById('captionInput').value;
+    const dateStr = formatDateForAPI(currentDate);
+    
+    const formData = new FormData();
+    formData.append('image', pendingImageFile);
+    formData.append('date', dateStr);
+    formData.append('caption', caption);
+    
+    try {
+        const response = await fetch('/api/upload_image', {
+            method: 'POST',
+            body: formData
         });
         
         const data = await response.json();
         
         if (response.ok) {
-            showNotification('Diary entry saved successfully!', 'success');
+            showNotification('Image uploaded successfully!', 'success');
+            loadDiaryEntry(); // Reload to show the new image
+            closeCaptionModal();
         } else {
-            showNotification(data.error || 'Failed to save diary entry', 'error');
+            showNotification(data.error || 'Failed to upload image', 'error');
         }
     } catch (error) {
-        console.error('Error saving diary entry:', error);
-        showNotification('Connection error while saving', 'error');
+        console.error('Error uploading image:', error);
+        showNotification('Failed to upload image', 'error');
     }
-}
-
-// Image management with tilt support
-function loadImages(images) {
-    const container = document.getElementById('imagesContainer');
-    container.innerHTML = '';
-    
-    images.forEach(imageData => {
-        createImageElement(imageData);
-    });
 }
 
 function createImageElement(imageData) {
     const container = document.getElementById('imagesContainer');
-    const imageDiv = document.createElement('div');
-    imageDiv.className = 'diary-image';
-    imageDiv.style.left = imageData.position_x + 'px';
-    imageDiv.style.top = imageData.position_y + 'px';
+    const img = document.createElement('img');
     
-    // Store transformation data in dataset
-    imageDiv.dataset.filename = imageData.filename;
-    imageDiv.dataset.rotation = imageData.rotation || 0;
-    imageDiv.dataset.scale = imageData.scale || 1;
-    imageDiv.dataset.tiltX = imageData.tilt_x || 0;
-    imageDiv.dataset.tiltY = imageData.tilt_y || 0;
+    img.src = `/static/uploads/${imageData.filename}`;
+    img.className = 'diary-image';
+    img.style.position = 'absolute';
+    img.style.left = imageData.position_x + 'px';
+    img.style.top = imageData.position_y + 'px';
+    img.style.zIndex = imageData.z_index || 1;
+    img.title = imageData.caption || '';
     
-    // Build transform with rotation, scale, and tilt
-    updateImageTransformFromData(imageDiv);
+    // Store data attributes
+    img.dataset.filename = imageData.filename;
+    img.dataset.caption = imageData.caption || '';
+    img.dataset.rotation = imageData.rotation || 0;
+    img.dataset.scale = imageData.scale || 1;
+    img.dataset.tiltX = imageData.tilt_x || 0;
+    img.dataset.tiltY = imageData.tilt_y || 0;
     
-    imageDiv.style.zIndex = imageData.z_index;
+    // Apply transforms
+    updateImageTransform(img);
     
-    imageDiv.innerHTML = `
-        <img src="/static/uploads/${imageData.filename}" alt="Diary image">
-        <div class="image-caption">${imageData.caption || ''}</div>
-    `;
+    // Add event listeners
+    setupImageEvents(img);
     
-    setupImageInteraction(imageDiv);
-    container.appendChild(imageDiv);
+    container.appendChild(img);
 }
 
-function updateImageTransformFromData(imageElement) {
-    const rotation = parseFloat(imageElement.dataset.rotation) || 0;
-    const scale = parseFloat(imageElement.dataset.scale) || 1;
-    const tiltX = parseFloat(imageElement.dataset.tiltX) || 0;
-    const tiltY = parseFloat(imageElement.dataset.tiltY) || 0;
+function setupImageEvents(img) {
+    // Click to select
+    img.addEventListener('click', function(e) {
+        e.stopPropagation();
+        selectImage(img);
+    });
     
-    const transforms = [];
-    if (rotation) transforms.push(`rotate(${rotation}deg)`);
-    if (scale !== 1) transforms.push(`scale(${scale})`);
-    if (tiltX || tiltY) transforms.push(`skew(${tiltX}deg, ${tiltY}deg)`);
-    
-    imageElement.style.transform = transforms.join(' ');
-}
-
-function setupImageInteraction(imageElement) {
-    imageElement.addEventListener('mousedown', function(e) {
+    // Right-click for controls
+    img.addEventListener('contextmenu', function(e) {
         e.preventDefault();
-        selectImage(imageElement);
-        
-        if (e.button === 0) { // Left click for dragging
-            isDragging = true;
-            const rect = imageElement.getBoundingClientRect();
-            
-            dragOffset.x = e.clientX - rect.left;
-            dragOffset.y = e.clientY - rect.top;
-            
-            document.addEventListener('mousemove', dragImage);
-            document.addEventListener('mouseup', stopDragging);
+        selectImage(img);
+        showImageControls(e.pageX, e.pageY);
+    });
+    
+    // Drag functionality
+    img.addEventListener('mousedown', function(e) {
+        if (e.button === 0) { // Left mouse button
+            e.preventDefault();
+            selectImage(img);
+            startDragging(e);
         }
     });
-    
-    imageElement.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-        selectImage(imageElement);
-        showImageControls(e.clientX, e.clientY);
-    });
-    
-    imageElement.addEventListener('dblclick', function(e) {
-        e.preventDefault();
-        selectImage(imageElement);
-        showImageControls(e.clientX, e.clientY);
-    });
 }
 
-function selectImage(imageElement) {
+function selectImage(img) {
     // Remove selection from other images
-    document.querySelectorAll('.diary-image').forEach(img => {
-        img.classList.remove('selected');
+    document.querySelectorAll('.diary-image').forEach(image => {
+        image.classList.remove('selected');
     });
     
-    // Select current image
-    imageElement.classList.add('selected');
-    selectedImage = imageElement;
+    // Select this image
+    img.classList.add('selected');
+    selectedImage = img;
 }
 
-function dragImage(e) {
+function startDragging(e) {
+    if (!selectedImage) return;
+    
+    isDragging = true;
+    const rect = selectedImage.getBoundingClientRect();
+    const containerRect = document.getElementById('imagesContainer').getBoundingClientRect();
+    
+    dragOffset.x = e.clientX - rect.left;
+    dragOffset.y = e.clientY - rect.top;
+    
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', stopDragging);
+    
+    selectedImage.style.cursor = 'grabbing';
+}
+
+function handleDrag(e) {
     if (!isDragging || !selectedImage) return;
     
-    e.preventDefault();
     const containerRect = document.getElementById('imagesContainer').getBoundingClientRect();
     
     let newX = e.clientX - containerRect.left - dragOffset.x;
@@ -194,73 +274,56 @@ function dragImage(e) {
 }
 
 function stopDragging() {
-    if (isDragging && selectedImage) {
-        isDragging = false;
-        updateImagePosition();
-        document.removeEventListener('mousemove', dragImage);
-        document.removeEventListener('mouseup', stopDragging);
+    if (!isDragging) return;
+    
+    isDragging = false;
+    document.removeEventListener('mousemove', handleDrag);
+    document.removeEventListener('mouseup', stopDragging);
+    
+    if (selectedImage) {
+        selectedImage.style.cursor = 'grab';
+        updateImageInDatabase();
     }
 }
 
 function showImageControls(x, y) {
     const controls = document.getElementById('imageControls');
-    
-    // Adjust position to keep controls on screen
-    const controlsWidth = 220;
-    const controlsHeight = 280;
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
-    
-    let adjustedX = x;
-    let adjustedY = y;
-    
-    if (x + controlsWidth > screenWidth) {
-        adjustedX = x - controlsWidth;
-    }
-    if (y + controlsHeight > screenHeight) {
-        adjustedY = y - controlsHeight;
-    }
-    
-    controls.style.left = Math.max(10, adjustedX) + 'px';
-    controls.style.top = Math.max(10, adjustedY) + 'px';
     controls.style.display = 'block';
+    controls.style.left = Math.min(x, window.innerWidth - 200) + 'px';
+    controls.style.top = Math.min(y, window.innerHeight - 300) + 'px';
 }
 
 function hideImageControls() {
     document.getElementById('imageControls').style.display = 'none';
+    
+    // Remove selection from all images
+    document.querySelectorAll('.diary-image').forEach(image => {
+        image.classList.remove('selected');
+    });
+    selectedImage = null;
 }
 
-// Enhanced rotation function
+// Image transformation functions
 function rotateImage(degrees) {
     if (!selectedImage) return;
     
     const currentRotation = parseFloat(selectedImage.dataset.rotation) || 0;
-    const newRotation = currentRotation + degrees;
-    
-    selectedImage.dataset.rotation = newRotation;
+    selectedImage.dataset.rotation = currentRotation + degrees;
     updateImageTransform();
-    updateImagePosition();
-    
-    showNotification(`Rotated ${degrees > 0 ? 'right' : 'left'} by ${Math.abs(degrees)}°`, 'info');
+    updateImageInDatabase();
 }
 
-// NEW: Tilt functions
 function tiltImage(tiltX, tiltY) {
     if (!selectedImage) return;
     
     const currentTiltX = parseFloat(selectedImage.dataset.tiltX) || 0;
     const currentTiltY = parseFloat(selectedImage.dataset.tiltY) || 0;
     
-    const newTiltX = Math.max(-45, Math.min(45, currentTiltX + tiltX));
-    const newTiltY = Math.max(-45, Math.min(45, currentTiltY + tiltY));
+    selectedImage.dataset.tiltX = currentTiltX + tiltX;
+    selectedImage.dataset.tiltY = currentTiltY + tiltY;
     
-    selectedImage.dataset.tiltX = newTiltX;
-    selectedImage.dataset.tiltY = newTiltY;
     updateImageTransform();
-    updateImagePosition();
-    
-    const direction = tiltX !== 0 ? (tiltX > 0 ? 'right' : 'left') : (tiltY > 0 ? 'down' : 'up');
-    showNotification(`Tilted ${direction} by ${Math.abs(tiltX || tiltY)}°`, 'info');
+    updateImageInDatabase();
 }
 
 function resetTilt() {
@@ -269,9 +332,17 @@ function resetTilt() {
     selectedImage.dataset.tiltX = 0;
     selectedImage.dataset.tiltY = 0;
     updateImageTransform();
-    updateImagePosition();
+    updateImageInDatabase();
+}
+
+function scaleImage(factor) {
+    if (!selectedImage) return;
     
-    showNotification('Tilt reset', 'success');
+    const currentScale = parseFloat(selectedImage.dataset.scale) || 1;
+    const newScale = Math.max(0.1, Math.min(3, currentScale * factor));
+    selectedImage.dataset.scale = newScale;
+    updateImageTransform();
+    updateImageInDatabase();
 }
 
 function resetTransforms() {
@@ -282,67 +353,63 @@ function resetTransforms() {
     selectedImage.dataset.tiltX = 0;
     selectedImage.dataset.tiltY = 0;
     updateImageTransform();
-    updateImagePosition();
-    
-    showNotification('All transformations reset', 'success');
+    updateImageInDatabase();
 }
 
-// Enhanced scale function
-function scaleImage(factor) {
-    if (!selectedImage) return;
+function updateImageTransform(img = selectedImage) {
+    if (!img) return;
     
-    const currentScale = parseFloat(selectedImage.dataset.scale) || 1;
-    const newScale = Math.max(0.3, Math.min(3, currentScale * factor));
+    const rotation = parseFloat(img.dataset.rotation) || 0;
+    const scale = parseFloat(img.dataset.scale) || 1;
+    const tiltX = parseFloat(img.dataset.tiltX) || 0;
+    const tiltY = parseFloat(img.dataset.tiltY) || 0;
     
-    selectedImage.dataset.scale = newScale;
-    updateImageTransform();
-    updateImagePosition();
-    
-    const action = factor > 1 ? 'enlarged' : 'shrunk';
-    showNotification(`Image ${action}`, 'info');
+    const transform = `rotate(${rotation}deg) scale(${scale}) skew(${tiltX}deg, ${tiltY}deg)`;
+    img.style.transform = transform;
 }
 
-// NEW: Update transform function that handles rotation, scale, and tilt
-function updateImageTransform() {
+async function deleteImage() {
     if (!selectedImage) return;
     
-    const rotation = parseFloat(selectedImage.dataset.rotation) || 0;
-    const scale = parseFloat(selectedImage.dataset.scale) || 1;
-    const tiltX = parseFloat(selectedImage.dataset.tiltX) || 0;
-    const tiltY = parseFloat(selectedImage.dataset.tiltY) || 0;
+    if (!confirm('Are you sure you want to delete this image?')) return;
     
-    const transforms = [];
-    if (rotation) transforms.push(`rotate(${rotation}deg)`);
-    if (scale !== 1) transforms.push(`scale(${scale})`);
-    if (tiltX || tiltY) transforms.push(`skew(${tiltX}deg, ${tiltY}deg)`);
+    const filename = selectedImage.dataset.filename;
     
-    selectedImage.style.transform = transforms.join(' ');
-}
-
-function deleteImage() {
-    if (!selectedImage) return;
-    
-    if (confirm('Are you sure you want to delete this image?')) {
-        selectedImage.remove();
-        selectedImage = null;
-        hideImageControls();
-        showNotification('Image deleted successfully', 'success');
+    try {
+        const response = await fetch('/api/delete_image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ filename: filename })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            selectedImage.remove();
+            hideImageControls();
+            showNotification('Image deleted successfully', 'success');
+        } else {
+            showNotification(data.error || 'Failed to delete image', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting image:', error);
+        showNotification('Failed to delete image', 'error');
     }
 }
 
-async function updateImagePosition() {
+async function updateImageInDatabase() {
     if (!selectedImage) return;
     
     const filename = selectedImage.dataset.filename;
-    const position_x = parseInt(selectedImage.style.left);
-    const position_y = parseInt(selectedImage.style.top);
+    const position_x = parseInt(selectedImage.style.left) || 0;
+    const position_y = parseInt(selectedImage.style.top) || 0;
     const rotation = parseFloat(selectedImage.dataset.rotation) || 0;
     const scale = parseFloat(selectedImage.dataset.scale) || 1;
     const tilt_x = parseFloat(selectedImage.dataset.tiltX) || 0;
     const tilt_y = parseFloat(selectedImage.dataset.tiltY) || 0;
-    
-    const captionElement = selectedImage.querySelector('.image-caption');
-    const caption = captionElement ? captionElement.textContent : '';
+    const caption = selectedImage.dataset.caption || '';
     
     try {
         const response = await fetch('/api/update_image', {
@@ -363,162 +430,78 @@ async function updateImagePosition() {
         });
         
         if (!response.ok) {
-            const data = await response.json();
-            console.error('Error updating image position:', data.error);
+            console.error('Failed to update image in database');
         }
     } catch (error) {
-        console.error('Error updating image position:', error);
+        console.error('Error updating image:', error);
     }
 }
 
-// Image upload
-function setupEventListeners() {
-    document.getElementById('imageUpload').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            pendingImageFile = file;
-            document.getElementById('captionModal').style.display = 'block';
-            document.getElementById('captionInput').focus();
-        }
-    });
-    
-    // Close controls when clicking outside
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('.image-controls') && !e.target.closest('.diary-image') && !e.target.closest('.help-toggle')) {
-            hideImageControls();
-        }
-        
-        if (!e.target.closest('.diary-image')) {
-            document.querySelectorAll('.diary-image').forEach(img => {
-                img.classList.remove('selected');
-            });
-            selectedImage = null;
-        }
-        
-        if (!e.target.closest('.keyboard-help')) {
-            document.getElementById('keyboardHelp').style.display = 'none';
-        }
-    });
-    
-    // Auto-save diary content
-    document.getElementById('diaryText').addEventListener('input', debounce(saveDiary, 2000));
-    
-    // Enhanced keyboard shortcuts
+function setupKeyboardShortcuts() {
     document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey || e.metaKey) {
-            switch(e.key) {
-                case 's':
-                    e.preventDefault();
-                    saveDiary();
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    changeDate(-1);
-                    break;
-                case 'ArrowRight':
-                    e.preventDefault();
-                    changeDate(1);
-                    break;
-                case 'r':
-                    e.preventDefault();
-                    resetTransforms();
-                    break;
-            }
+        // Save diary (Ctrl+S)
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            saveDiary();
         }
         
-        // Tilt shortcuts with Shift key
-        if (selectedImage && e.shiftKey) {
-            switch(e.key) {
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    tiltImage(-5, 0);
-                    break;
-                case 'ArrowRight':
-                    e.preventDefault();
-                    tiltImage(5, 0);
-                    break;
-                case 'ArrowUp':
-                    e.preventDefault();
-                    tiltImage(0, -5);
-                    break;
-                case 'ArrowDown':
-                    e.preventDefault();
-                    tiltImage(0, 5);
-                    break;
-            }
+        // Change date (Ctrl+Arrow)
+        if (e.ctrlKey && e.key === 'ArrowLeft') {
+            e.preventDefault();
+            changeDate(-1);
+        }
+        if (e.ctrlKey && e.key === 'ArrowRight') {
+            e.preventDefault();
+            changeDate(1);
         }
         
-        if (selectedImage && e.key === 'Delete') {
-            deleteImage();
+        // Image controls (when image is selected)
+        if (selectedImage) {
+            if (e.key === 'Delete') {
+                e.preventDefault();
+                deleteImage();
+            }
+            
+            if (e.shiftKey) {
+                switch(e.key) {
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        tiltImage(-2, 0);
+                        break;
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        tiltImage(2, 0);
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        tiltImage(0, -2);
+                        break;
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        tiltImage(0, 2);
+                        break;
+                }
+            }
+            
+            if (e.ctrlKey && e.key === 'r') {
+                e.preventDefault();
+                resetTransforms();
+            }
         }
         
         if (e.key === 'Escape') {
             hideImageControls();
-            closeCaptionModal();
         }
     });
 }
 
-async function saveCaptionAndUpload() {
-    if (!pendingImageFile) return;
-    
-    const caption = document.getElementById('captionInput').value;
-    const formData = new FormData();
-    formData.append('image', pendingImageFile);
-    formData.append('date', getDateString());
-    formData.append('caption', caption);
-    
-    try {
-        const response = await fetch('/api/upload_image', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            showNotification('Image uploaded successfully!', 'success');
-            
-            // Create image element with default tilt values
-            const imageData = {
-                filename: data.filename,
-                caption: caption,
-                position_x: 50,
-                position_y: 50,
-                rotation: 0,
-                scale: 1.0,
-                tilt_x: 0,
-                tilt_y: 0,
-                z_index: 1
-            };
-            
-            createImageElement(imageData);
-            closeCaptionModal();
-        } else {
-            showNotification(data.error || 'Failed to upload image', 'error');
-        }
-    } catch (error) {
-        console.error('Error uploading image:', error);
-        showNotification('Connection error while uploading', 'error');
+// Click outside to hide controls
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.image-controls') && !e.target.closest('.diary-image')) {
+        hideImageControls();
     }
-    
-    pendingImageFile = null;
-    document.getElementById('imageUpload').value = '';
-}
+});
 
-function closeCaptionModal() {
-    document.getElementById('captionModal').style.display = 'none';
-    document.getElementById('captionInput').value = '';
-    pendingImageFile = null;
-    document.getElementById('imageUpload').value = '';
-}
-
-function toggleKeyboardHelp() {
-    const help = document.getElementById('keyboardHelp');
-    help.style.display = help.style.display === 'none' ? 'block' : 'none';
-}
-
-// Utility functions
 function showNotification(message, type = 'info') {
     const notification = document.getElementById('notification');
     notification.textContent = message;
@@ -529,24 +512,10 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
+function toggleKeyboardHelp() {
+    const help = document.getElementById('keyboardHelp');
+    help.style.display = help.style.display === 'none' ? 'block' : 'none';
 }
-
-// Modal event listeners
-document.getElementById('captionInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        saveCaptionAndUpload();
-    }
-});
 
 // Touch support for mobile devices
 let touchStartX = 0;
@@ -582,29 +551,14 @@ document.addEventListener('touchend', function(e) {
     }
 });
 
-// Additional helper functions for advanced tilt operations
-function getTiltFromTransform(transform) {
-    const skewMatch = transform.match(/skew\(([^,]+),?\s*([^)]*)\)/);
-    if (skewMatch) {
-        return {
-            x: parseFloat(skewMatch[1]) || 0,
-            y: parseFloat(skewMatch[2]) || 0
-        };
+// Modal event listeners
+document.getElementById('captionInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        saveCaptionAndUpload();
     }
-    return { x: 0, y: 0 };
-}
+});
 
-function getRotationFromTransform(transform) {
-    const rotateMatch = transform.match(/rotate\(([^)]+)\)/);
-    return rotateMatch ? parseFloat(rotateMatch[1]) : 0;
-}
-
-function getScaleFromTransform(transform) {
-    const scaleMatch = transform.match(/scale\(([^)]+)\)/);
-    return scaleMatch ? parseFloat(scaleMatch[1]) : 1;
-}
-
-// Advanced image manipulation presets
+// Image presets
 function applyImagePreset(preset) {
     if (!selectedImage) return;
     
@@ -634,15 +588,8 @@ function applyImagePreset(preset) {
     }
     
     updateImageTransform();
-    updateImagePosition();
+    updateImageInDatabase();
     showNotification(`Applied ${preset} preset`, 'success');
 }
 
-// Initialize the application
 console.log('Digital Diary with Image Tilting initialized');
-console.log('Available features:');
-console.log('- Image rotation: Right-click image → Rotate buttons');
-console.log('- Image tilting: Right-click image → Tilt buttons');
-console.log('- Image scaling: Right-click image → Scale buttons');
-console.log('- Keyboard shortcuts: Shift + Arrow keys for tilting');
-console.log('- Drag and drop: Click and drag images to reposition');
