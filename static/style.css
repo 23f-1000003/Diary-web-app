@@ -10,7 +10,56 @@ body {
     background: linear-gradient(135deg, #f5f1e8 0%, #e8dcc0 100%);
     min-height: 100vh;
 }
+.diary-image {
+    position: absolute;
+    cursor: move;
+    pointer-events: all;
+    transition: transform 0.2s ease;
+    border-radius: 8px;
+    box-shadow: 
+        0 5px 15px rgba(0, 0, 0, 0.2),
+        0 0 0 3px white,
+        0 0 0 4px rgba(139, 69, 19, 0.3);
+    background: white;
+    padding: 10px;
+    transform-origin: center center;
+    display: flex;
+    flex-direction: column;
+    max-width: 220px;
+}
 
+.diary-image img {
+    display: block;
+    max-width: 200px;
+    max-height: 200px;
+    width: auto;
+    height: auto;
+    border-radius: 4px;
+    order: 1; /* Image appears second */
+}
+
+.image-caption {
+    margin-bottom: 8px;
+    margin-top: 0;
+    font-family: 'Dancing Script', cursive;
+    font-size: 14px;
+    color: #654321;
+    text-align: center;
+    word-wrap: break-word;
+    order: -1; /* Caption appears first (at top) */
+    font-weight: 600;
+    background: linear-gradient(45deg, #f8f9fa, #e9ecef);
+    padding: 4px 8px;
+    border-radius: 4px;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.diary-image.selected {
+    box-shadow: 
+        0 5px 15px rgba(0, 0, 0, 0.2),
+        0 0 0 3px white,
+        0 0 0 4px #007bff;
+}
 /* Login Page Styles */
 .login-body {
     display: flex;
@@ -302,20 +351,7 @@ body {
     z-index: 3;
 }
 
-.diary-image {
-    position: absolute;
-    cursor: move;
-    pointer-events: all;
-    transition: transform 0.2s ease;
-    border-radius: 8px;
-    box-shadow: 
-        0 5px 15px rgba(0, 0, 0, 0.2),
-        0 0 0 3px white,
-        0 0 0 4px rgba(139, 69, 19, 0.3);
-    background: white;
-    padding: 10px;
-    transform-origin: center center;
-}
+
 
 .diary-image:hover {
     z-index: 1000;

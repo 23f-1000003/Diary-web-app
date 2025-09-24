@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Digital Diary - {{ username }}</title>
+    <title>My Digital Diary</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 </head>
-<body class="diary-body">
+<body>
     <div class="diary-container">
         <div class="diary-header">
-            <h1>{{ username }}'s Diary</h1>
-            <div class="date-display" id="currentDate"></div>
-            <a href="/logout" class="logout-btn">Close Diary</a>
+            <h1 class="diary-title">My Digital Diary</h1>
+            <div class="user-info">Welcome back, {{ username }}!</div>
+            <a href="/logout" class="logout-btn">Logout</a>
         </div>
+        
+        <div id="currentDate" class="current-date"></div>
         
         <div class="diary-book">
             <div class="diary-page">
@@ -62,7 +64,7 @@
     <div id="captionModal" class="modal">
         <div class="modal-content">
             <h3>Add Caption</h3>
-            <input type="text" id="captionInput" placeholder="Write a caption for your photo...">
+            <input type="text" id="captionInput" placeholder="Write a caption for your photo..." maxlength="200">
             <div class="modal-buttons">
                 <button onclick="saveCaptionAndUpload()">Add Photo</button>
                 <button onclick="closeCaptionModal()">Cancel</button>
@@ -70,7 +72,7 @@
         </div>
     </div>
 
-    <!-- Enhanced Image Controls with Tilt -->
+    <!-- Image Controls -->
     <div id="imageControls" class="image-controls" style="display: none;">
         <div class="controls-title">Image Controls</div>
         
@@ -100,36 +102,36 @@
         <div class="controls-section">
             <div class="controls-label">Scale</div>
             <div class="controls-group">
-                <button onclick="scaleImage(0.9)" title="Shrink">−</button>
-                <button onclick="scaleImage(1.1)" title="Enlarge">+</button>
-                <button onclick="scaleImage(0.95)" title="Fine Shrink">−</button>
-                <button onclick="scaleImage(1.05)" title="Fine Enlarge">+</button>
+                <button onclick="scaleImage(1.1)" title="Scale Up">🔍+</button>
+                <button onclick="scaleImage(0.9)" title="Scale Down">🔍-</button>
             </div>
         </div>
         
         <div class="controls-section">
             <div class="controls-group">
-                <button onclick="resetTransforms()" class="reset-btn" title="Reset All">🔄 Reset All</button>
-                <button onclick="deleteImage()" class="delete-btn" title="Delete Image">🗑️ Delete</button>
+                <button onclick="resetTransforms()" title="Reset All">Reset All</button>
+                <button onclick="deleteImage()" title="Delete Image" style="background: #dc3545; color: white;">Delete</button>
             </div>
         </div>
     </div>
 
+    <!-- Notification Element -->
     <div id="notification" class="notification"></div>
-    
-    <!-- Keyboard shortcuts help -->
-    <div class="keyboard-help">
-        <div class="help-toggle" onclick="toggleKeyboardHelp()">⌨️</div>
-        <div class="help-content" id="keyboardHelp" style="display: none;">
-            <h4>Keyboard Shortcuts</h4>
-            <div class="shortcut"><kbd>Ctrl+S</kbd> Save entry</div>
-            <div class="shortcut"><kbd>Ctrl+←/→</kbd> Change date</div>
-            <div class="shortcut"><kbd>Delete</kbd> Delete selected image</div>
-            <div class="shortcut"><kbd>Shift+←/→</kbd> Tilt image horizontally</div>
-            <div class="shortcut"><kbd>Shift+↑/↓</kbd> Tilt image vertically</div>
-            <div class="shortcut"><kbd>Ctrl+R</kbd> Reset transformations</div>
-            <div class="shortcut"><kbd>Esc</kbd> Close controls</div>
-        </div>
+
+    <!-- Help Toggle -->
+    <button class="help-toggle" onclick="toggleKeyboardHelp()" title="Keyboard Shortcuts">?</button>
+
+    <!-- Keyboard Help -->
+    <div id="keyboardHelp" class="keyboard-help" style="display: none;">
+        <h4>Keyboard Shortcuts</h4>
+        <ul>
+            <li><strong>Ctrl/Cmd + S:</strong> Save diary</li>
+            <li><strong>Ctrl/Cmd + ←/→:</strong> Previous/Next day</li>
+            <li><strong>Ctrl/Cmd + R:</strong> Reset transforms</li>
+            <li><strong>Shift + Arrow Keys:</strong> Tilt selected image</li>
+            <li><strong>Delete:</strong> Delete selected image</li>
+            <li><strong>Escape:</strong> Close controls/modals</li>
+        </ul>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
