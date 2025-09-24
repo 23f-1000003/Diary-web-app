@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Diary - {{ username }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+</head>
+<body class="diary-body">
+    <div class="diary-container">
+        <div class="diary-header">
+            <h1>{{ username }}'s Diary</h1>
+            <div class="date-display" id="currentDate"></div>
+            <a href="/logout" class="logout-btn">Close Diary</a>
+        </div>
+        
+        <div class="diary-book">
+            <div class="diary-page">
+                <div class="page-lines"></div>
+                <div class="diary-content" id="diaryContent">
+                    <textarea 
+                        id="diaryText" 
+                        placeholder="Dear Diary..."
+                        spellcheck="false"
+                    ></textarea>
+                    
+                    <div id="imagesContainer" class="images-container"></div>
+                </div>
+                
+                <div class="page-controls">
+                    <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+                    <button class="control-btn add-image-btn" onclick="document.getElementById('imageUpload').click()">
+                        📷 Add Photo
+                    </button>
+                    
+                    <button class="control-btn save-btn" onclick="saveDiary()">
+                        💾 Save Entry
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="navigation">
+            <button class="nav-btn prev-btn" onclick="changeDate(-1)">
+                <span class="nav-icon">◀</span>
+                <span class="nav-text">Previous Day</span>
+            </button>
+            
+            <button class="nav-btn today-btn" onclick="goToToday()">
+                Today
+            </button>
+            
+            <button class="nav-btn next-btn" onclick="changeDate(1)">
+                <span class="nav-text">Next Day</span>
+                <span class="nav-icon">▶</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Image Caption Modal -->
+    <div id="captionModal" class="modal">
+        <div class="modal-content">
+            <h3>Add Caption</h3>
+            <input type="text" id="captionInput" placeholder="Write a caption for your photo...">
+            <div class="modal-buttons">
+                <button onclick="saveCaptionAndUpload()">Add Photo</button>
+                <button onclick="closeCaptionModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced Image Controls with Tilt -->
+    <div id="imageControls" class="image-controls" style="display: none;">
+        <div class="controls-title">Image Controls</div>
+        
+        <div class="controls-section">
+            <div class="controls-label">Rotate</div>
+            <div class="controls-group">
+                <button onclick="rotateImage(-15)" title="Rotate Left">↺ 15°</button>
+                <button onclick="rotateImage(15)" title="Rotate Right">↻ 15°</button>
+                <button onclick="rotateImage(-5)" title="Fine Rotate Left">↺ 5°</button>
+                <button onclick="rotateImage(5)" title="Fine Rotate Right">↻ 5°</button>
+            </div>
+        </div>
+        
+        <div class="controls-section">
+            <div class="controls-label">Tilt</div>
+            <div class="controls-group">
+                <button onclick="tiltImage(-5, 0)" title="Tilt Left">◤</button>
+                <button onclick="tiltImage(5, 0)" title="Tilt Right">◥</button>
+                <button onclick="tiltImage(0, -5)" title="Tilt Up">⩙</button>
+                <button onclick="tiltImage(0, 5)" title="Tilt Down">⩘</button>
+            </div>
+            <div class="controls-group">
+                <button onclick="resetTilt()" title="Reset Tilt">Reset Tilt</button>
+            </div>
+        </div>
+        
+        <div class="controls-section">
+            <div class="controls-label">Scale</div>
+            <div class="controls-group">
+                <button onclick="scaleImage(0.9)" title="Shrink">−</button>
+                <button onclick="scaleImage(1.1)" title="Enlarge">+</button>
+                <button onclick="scaleImage(0.95)" title="Fine Shrink">−</button>
+                <button onclick="scaleImage(1.05)" title="Fine Enlarge">+</button>
+            </div>
+        </div>
+        
+        <div class="controls-section">
+            <div class="controls-group">
+                <button onclick="resetTransforms()" class="reset-btn" title="Reset All">🔄 Reset All</button>
+                <button onclick="deleteImage()" class="delete-btn" title="Delete Image">🗑️ Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+    
+    <!-- Keyboard shortcuts help -->
+    <div class="keyboard-help">
+        <div class="help-toggle" onclick="toggleKeyboardHelp()">⌨️</div>
+        <div class="help-content" id="keyboardHelp" style="display: none;">
+            <h4>Keyboard Shortcuts</h4>
+            <div class="shortcut"><kbd>Ctrl+S</kbd> Save entry</div>
+            <div class="shortcut"><kbd>Ctrl+←/→</kbd> Change date</div>
+            <div class="shortcut"><kbd>Delete</kbd> Delete selected image</div>
+            <div class="shortcut"><kbd>Shift+←/→</kbd> Tilt image horizontally</div>
+            <div class="shortcut"><kbd>Shift+↑/↓</kbd> Tilt image vertically</div>
+            <div class="shortcut"><kbd>Ctrl+R</kbd> Reset transformations</div>
+            <div class="shortcut"><kbd>Esc</kbd> Close controls</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
