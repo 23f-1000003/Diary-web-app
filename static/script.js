@@ -1,6 +1,44 @@
 let currentDate = new Date().toISOString().split('T')[0];
 let currentImages = [];
-
+function createImageElement(imageData) {
+    const container = document.getElementById('imagesContainer');
+    
+    // Create wrapper div
+    const imgWrapper = document.createElement('div');
+    imgWrapper.className = 'diary-image';
+    imgWrapper.dataset.filename = imageData.filename;
+    imgWrapper.dataset.rotation = imageData.rotation || 0;
+    imgWrapper.dataset.scale = imageData.scale || 1;
+    imgWrapper.dataset.tiltX = imageData.tilt_x || 0;
+    imgWrapper.dataset.tiltY = imageData.tilt_y || 0;
+    
+    // Position the wrapper
+    imgWrapper.style.left = (imageData.position_x || 0) + 'px';
+    imgWrapper.style.top = (imageData.position_y || 0) + 'px';
+    imgWrapper.style.zIndex = imageData.z_index || 1;
+    
+    // Create caption FIRST (this will appear at top due to flexbox order)
+    if (imageData.caption) {
+        const caption = document.createElement('div');
+        caption.className = 'image-caption';
+        caption.textContent = imageData.caption;
+        imgWrapper.appendChild(caption);  // Add caption first
+    }
+    
+    // Create image element SECOND
+    const img = document.createElement('img');
+    img.src = `/static/uploads/${imageData.filename}`;
+    img.alt = imageData.caption || 'Diary photo';
+    imgWrapper.appendChild(img);  // Add image after caption
+    
+    // Apply transforms
+    updateImageTransform(imgWrapper);
+    
+    // Add event listeners
+    setupImageEvents(imgWrapper);
+    
+    container.appendChild(imgWrapper);
+}
 document.addEventListener('DOMContentLoaded', function() {
     loadEntry(currentDate);
     updateDateDisplay();
